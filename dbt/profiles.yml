@@ -1,0 +1,26 @@
+enterprise_dw:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: '{{ env_var("SNOWFLAKE_ACCOUNT", "dummy") }}'
+      user: '{{ env_var("SNOWFLAKE_USER", "dummy") }}'
+      password: '{{ env_var("SNOWFLAKE_PASSWORD", "dummy") }}'
+      role: '{{ env_var("SNOWFLAKE_ROLE", "SYSADMIN") }}'
+      warehouse: '{{ env_var("SNOWFLAKE_WAREHOUSE", "portfolio_wh") }}'
+      database: enterprise_dw
+      schema: bronze
+      threads: 4
+      client_session_keep_alive: false
+
+    prod:
+      type: snowflake
+      account: '{{ env_var("SNOWFLAKE_ACCOUNT") }}'
+      user: '{{ env_var("SNOWFLAKE_USER") }}'
+      password: '{{ env_var("SNOWFLAKE_PASSWORD") }}'
+      role: '{{ env_var("SNOWFLAKE_ROLE", "SYSADMIN") }}'
+      warehouse: '{{ env_var("SNOWFLAKE_WAREHOUSE", "portfolio_wh") }}'
+      database: enterprise_dw
+      schema: bronze
+      threads: 4
+      client_session_keep_alive: false

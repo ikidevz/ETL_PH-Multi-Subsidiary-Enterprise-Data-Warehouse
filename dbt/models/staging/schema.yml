@@ -1,0 +1,653 @@
+# models/staging/schema.yml
+
+version: 2
+
+models:
+  # ── SUB_A · RetailCo ──────────────────────────────────────────────────────
+
+  - name: stg_sub_a_sales
+    description: >
+      Staging view for SUB_A retail POS sales (bronze.raw_sub_a_sales).
+      Emits the 8-column canonical shape for ent_transaction plus retail-specific
+      passthrough columns for mart_retail_sales. One row per POS transaction.
+      _loaded_at is cast from updated_at (CDC watermark column).
+
+    columns:
+      # ── Canonical integration columns ──────────────────────────────────────
+      - name: transaction_nk
+        description: "Natural key — UUID per POS transaction (source: order_id)"
+        tests:
+          - not_null
+          - unique
+
+      - name: subsidiary_code
+        description: "Hardcoded source identifier — always SUB_A"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_A"]
+
+      - name: customer_id_nk
+        description: "Customer natural key (source: customer_id)"
+        tests:
+          - not_null
+
+      - name: transaction_date
+        description: "Date the order was placed, cast from order_date"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+
+      - name: amount_local
+        description: "Net revenue after discount in PHP (source: net_sales)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 50000
+
+      - name: currency_code
+        description: "ISO currency code — hardcoded PHP"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["PHP"]
+
+      - name: gl_account_code
+        description: "GL account code — hardcoded RETAIL_REVENUE (valid in gl_account_mapping seed)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["RETAIL_REVENUE"]
+
+      - name: _loaded_at
+        description: "Audit timestamp cast from updated_at; used as incremental watermark"
+        tests:
+          - not_null
+
+      # ── SUB_A passthrough columns (for mart_retail_sales) ─────────────────
+      - name: product_sku
+        description: "Product SKU (source: product_sku) — used in ent_transaction product_key derivation"
+        tests:
+          - not_null
+
+      - name: channel
+        description: "Sales channel (e.g. In-Store, Lazada, Shopee) — dimension in mart_retail_sales"
+        tests:
+          - not_null
+
+      - name: category
+        description: "Product category (e.g. Electronics, Apparel) — dimension in mart_retail_sales and ent_product"
+        tests:
+          - not_null
+
+      - name: region
+        description: "Philippine region of the sale — dimension in mart_retail_sales"
+        tests:
+          - not_null
+
+      - name: qty
+        description: "Units sold — used in mart_retail_sales units_sold and gross_sales calc"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 10
+
+      - name: unit_price
+        description: "Pre-discount unit price in PHP — used in gross_sales and discount_amount calc"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 100
+              max_value: 5000
+
+      - name: discount_pct
+        description: "Discount percentage applied (0, 5, 10, 15, or 20)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 5, 10, 15, 20]
+
+  # ── SUB_B · LogisticsCo ───────────────────────────────────────────────────
+
+  - name: stg_sub_b_shipments
+    description: >
+      Staging view for SUB_B freight & logistics shipments (bronze.raw_sub_b_shipments).
+      Emits the 8-column canonical shape for ent_transaction plus logistics-specific
+      passthrough columns for mart_freight_ops and mart_cash_collection.
+      One row per shipment. _loaded_at is cast from modified_ts.
+
+    columns:
+      # ── Canonical integration columns ──────────────────────────────────────
+      - name: transaction_nk
+        description: "Natural key — UUID per shipment (source: shipment_id)"
+        tests:
+          - not_null
+          - unique
+
+      - name: subsidiary_code
+        description: "Hardcoded source identifier — always SUB_B"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_B"]
+
+      - name: customer_id_nk
+        description: "Billing client natural key (source: client_id)"
+        tests:
+          - not_null
+
+      - name: transaction_date
+        description: "Ship date cast to DATE (source: ship_date)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+
+      - name: amount_local
+        description: "Total freight + fuel surcharge revenue in PHP (source: total_revenue)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 500
+              max_value: 200000
+
+      - name: currency_code
+        description: "ISO currency code — hardcoded PHP"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["PHP"]
+
+      - name: gl_account_code
+        description: "GL account code — hardcoded FREIGHT_REVENUE (valid in gl_account_mapping seed)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["FREIGHT_REVENUE"]
+
+      - name: _loaded_at
+        description: "Audit timestamp cast from modified_ts; used as incremental watermark"
+        tests:
+          - not_null
+
+      # ── SUB_B passthrough columns (for mart_freight_ops, mart_cash_collection) ──
+      - name: origin_city
+        description: "Origin city of the shipment route"
+        tests:
+          - not_null
+
+      - name: dest_city
+        description: "Destination city of the shipment route"
+        tests:
+          - not_null
+
+      - name: service_type
+        description: "Freight service type (e.g. LCL, FCL, Express) — dimension in mart_freight_ops and ent_product"
+        tests:
+          - not_null
+
+      - name: weight_kg
+        description: "Shipment weight in kilograms"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 10
+              max_value: 5000
+
+      - name: volume_cbm
+        description: "Shipment volume in cubic meters"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.1
+              max_value: 50
+
+      - name: freight_revenue
+        description: "Base freight revenue before fuel surcharge"
+        tests:
+          - not_null
+
+      - name: fuel_surcharge
+        description: "Fuel surcharge (8% of freight_revenue)"
+        tests:
+          - not_null
+
+      - name: delay_days
+        description: "Days delayed vs expected delivery — proxy for collection lag in mart_cash_collection"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 30
+
+      - name: expected_del
+        description: "Expected delivery date"
+        tests:
+          - not_null
+
+      - name: actual_del
+        description: "Actual delivery date"
+        tests:
+          - not_null
+
+  # ── SUB_C · FinanceCo ─────────────────────────────────────────────────────
+
+  - name: stg_sub_c_loans
+    description: >
+      Staging view for SUB_C core banking loan accounts (bronze.raw_sub_c_loans).
+      Emits the 8-column canonical shape for ent_transaction plus lending-specific
+      passthrough columns for mart_loan_portfolio and mart_cash_collection.
+      One row per loan account. _loaded_at is cast from last_updated.
+
+      gl_account_code is set to INTEREST_INCOME (GRP-4300) — corrected from
+      the original LOAN_REVENUE which did not exist in the gl_account_mapping seed.
+
+      loan_status is normalized in this view from verbose source values
+      (e.g. '30 DPD', 'Non-Performing Loan (NPL)') to standard codes
+      ('30DPD', 'NPL') so mart CASE WHEN filters work correctly.
+
+    columns:
+      # ── Canonical integration columns ──────────────────────────────────────
+      - name: transaction_nk
+        description: "Natural key — loan account ID (source: loan_id)"
+        tests:
+          - not_null
+          - unique
+
+      - name: subsidiary_code
+        description: "Hardcoded source identifier — always SUB_C"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_C"]
+
+      - name: customer_id_nk
+        description: "Borrower natural key (source: borrower_id)"
+        tests:
+          - not_null
+
+      - name: transaction_date
+        description: "Loan origination date cast to DATE (source: origination_date)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+
+      - name: amount_local
+        description: "Outstanding loan balance in PHP (source: outstanding_balance)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 5000000
+
+      - name: currency_code
+        description: "ISO currency code — hardcoded PHP"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["PHP"]
+
+      - name: gl_account_code
+        description: "GL account code — INTEREST_INCOME (GRP-4300), corrected from original LOAN_REVENUE"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["INTEREST_INCOME"]
+
+      - name: _loaded_at
+        description: "Audit timestamp cast from last_updated; used as incremental watermark"
+        tests:
+          - not_null
+
+      # ── SUB_C passthrough columns (for mart_loan_portfolio, mart_cash_collection) ──
+      - name: loan_type
+        description: "Loan product type (e.g. Personal, Home, SME) — dimension in mart_loan_portfolio and ent_product"
+        tests:
+          - not_null
+
+      - name: branch_id
+        description: "Originating branch ID — dimension in mart_loan_portfolio"
+        tests:
+          - not_null
+
+      - name: principal_amount
+        description: "Original loan principal in PHP"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 10000
+              max_value: 5000000
+
+      - name: interest_rate
+        description: "Annual interest rate percentage"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 4.5
+              max_value: 24.0
+
+      - name: outstanding_balance
+        description: "Current outstanding balance in PHP"
+        tests:
+          - not_null
+
+      - name: monthly_payment
+        description: "Monthly repayment amount — used in mart_cash_collection billed_php"
+        tests:
+          - not_null
+
+      - name: term_months
+        description: "Loan term in months"
+        tests:
+          - not_null
+
+      - name: maturity_date
+        description: "Loan maturity date"
+        tests:
+          - not_null
+
+      - name: days_past_due
+        description: "Days past due — collection lag proxy for mart_cash_collection"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 365
+
+      - name: loan_status
+        description: >
+          Normalized loan status code. Raw source values are mapped as follows:
+          'Current' → CURRENT, 'Grace Period' → GRACE_PERIOD,
+          '30 DPD' → 30DPD, '60 DPD' → 60DPD, '90 DPD' → 90DPD,
+          '120+ DPD' / 'Default' / 'NPL' variants → NPL,
+          'Restructured' / 'Refinanced' → RESTRUCTURED,
+          'Charged Off' / 'Written Off' / 'Foreclosed' → CHARGED_OFF,
+          'Closed' / 'Paid Off' → CLOSED.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - "CURRENT"
+                - "GRACE_PERIOD"
+                - "30DPD"
+                - "60DPD"
+                - "90DPD"
+                - "NPL"
+                - "RESTRUCTURED"
+                - "CHARGED_OFF"
+                - "CLOSED"
+
+  # ── SUB_D · ManufactureCo (SAP S/4) ──────────────────────────────────────
+
+  - name: stg_sub_d_orders
+    description: >
+      Staging view for SUB_D SAP S/4 sales order lines (bronze.raw_sub_d_orders).
+      Emits the 8-column canonical shape for ent_transaction plus manufacturing-specific
+      passthrough columns for mart_order_fulfillment. One row per order line.
+      _loaded_at is cast from change_date (SAP document change timestamp).
+
+      NOTE: transaction_nk = order_num. SAP source has composite PK
+      (order_num + order_item). If an order has multiple line items, order_num
+      will not be unique. Recommend changing transaction_nk to
+      CONCAT(order_num, '-', order_item) if uniqueness issues arise.
+      The unique test is omitted below for this reason.
+
+    columns:
+      # ── Canonical integration columns ──────────────────────────────────────
+      - name: transaction_nk
+        description: >
+          Natural key — SAP order number (source: order_num).
+          NOTE: not guaranteed unique if an order has multiple order_item lines.
+          Unique test omitted intentionally — see model description.
+        tests:
+          - not_null
+
+      - name: subsidiary_code
+        description: "Hardcoded source identifier — always SUB_D"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_D"]
+
+      - name: customer_id_nk
+        description: "SAP sold-to customer number (source: customer_id)"
+        tests:
+          - not_null
+
+      - name: transaction_date
+        description: "Order placement date cast to DATE (source: order_date)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+
+      - name: amount_local
+        description: "Total order value in PHP (source: order_value_php = order_qty × net_price)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000000
+
+      - name: currency_code
+        description: "ISO currency code — hardcoded PHP"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["PHP"]
+
+      - name: gl_account_code
+        description: "GL account code — hardcoded MANUFACTURING_REVENUE (valid in gl_account_mapping seed)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["MANUFACTURING_REVENUE"]
+
+      - name: _loaded_at
+        description: "Audit timestamp cast from change_date; used as incremental watermark"
+        tests:
+          - not_null
+
+      # ── SUB_D passthrough columns (for mart_order_fulfillment) ─────────────
+      - name: order_item
+        description: "SAP order line item number"
+        tests:
+          - not_null
+
+      - name: doc_type
+        description: "SAP document type (e.g. STANDARD, RUSH, RETURN) — dimension in mart_order_fulfillment"
+        tests:
+          - not_null
+
+      - name: sales_org
+        description: "SAP sales organization — dimension in mart_order_fulfillment"
+        tests:
+          - not_null
+
+      - name: material_id
+        description: "SAP material number — used in ent_transaction product_key derivation and ent_product"
+        tests:
+          - not_null
+
+      - name: plant
+        description: "Manufacturing plant — dimension in mart_order_fulfillment and ent_product cost_center"
+        tests:
+          - not_null
+
+      - name: order_qty
+        description: "Ordered quantity"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 10
+              max_value: 1000
+
+      - name: delivered_qty
+        description: "Quantity actually delivered (cast to INTEGER)"
+        tests:
+          - not_null
+
+      - name: net_price
+        description: "Unit price in PHP"
+        tests:
+          - not_null
+
+      - name: status
+        description: "Order fulfillment status"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["OPEN", "DELIVERED", "BILLED", "CANCELLED"]
+
+      - name: requested_del
+        description: "Customer-requested delivery date"
+        tests:
+          - not_null
+
+      - name: confirmed_del
+        description: "Confirmed delivery date — used in avg_lead_time_days calc"
+        tests:
+          - not_null
+
+  # ── SUB_E · PropertyCo ────────────────────────────────────────────────────
+
+  - name: stg_sub_e_leases
+    description: >
+      Staging view for SUB_E property lease contracts (bronze.raw_sub_e_leases).
+      Emits the 8-column canonical shape for ent_transaction plus property-specific
+      passthrough columns for mart_lease_portfolio. One row per lease contract.
+      _loaded_at is cast from start_date (no CDC watermark in SUB_E source).
+
+      gl_account_code is set to RENTAL_INCOME (GRP-4500) — corrected from
+      the original LEASE_REVENUE which did not exist in the gl_account_mapping seed.
+
+    columns:
+      # ── Canonical integration columns ──────────────────────────────────────
+      - name: transaction_nk
+        description: "Natural key — sequential lease contract ID (source: contract_id)"
+        tests:
+          - not_null
+          - unique
+
+      - name: subsidiary_code
+        description: "Hardcoded source identifier — always SUB_E"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_E"]
+
+      - name: customer_id_nk
+        description: "Tenant natural key (source: tenant_id)"
+        tests:
+          - not_null
+
+      - name: transaction_date
+        description: "Lease start date cast to DATE (source: start_date)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: date
+
+      - name: amount_local
+        description: "Annual rent in PHP (source: annual_rent_php = monthly_rent_php × 12)"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 60000
+              max_value: 6000000
+
+      - name: currency_code
+        description: "ISO currency code — hardcoded PHP"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["PHP"]
+
+      - name: gl_account_code
+        description: "GL account code — RENTAL_INCOME (GRP-4500), corrected from original LEASE_REVENUE"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["RENTAL_INCOME"]
+
+      - name: _loaded_at
+        description: "Audit timestamp cast from start_date (SUB_E has no CDC watermark column)"
+        tests:
+          - not_null
+
+      # ── SUB_E passthrough columns (for mart_lease_portfolio) ───────────────
+      - name: property_id
+        description: "Property identifier"
+        tests:
+          - not_null
+
+      - name: unit_type
+        description: "Type of leasable unit (e.g. Office Unit, Warehouse) — dimension in mart_lease_portfolio and ent_product"
+        tests:
+          - not_null
+
+      - name: lease_type
+        description: "Lease category (e.g. Commercial, Residential) — dimension in mart_lease_portfolio and ent_product"
+        tests:
+          - not_null
+
+      - name: area_sqm
+        description: "Leasable area in square meters"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 20
+              max_value: 2000
+
+      - name: term_years
+        description: "Lease term in years"
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 5, 10]
+
+      - name: end_date
+        description: "Lease expiry date — used in occupancy status and expiring_90d_count"
+        tests:
+          - not_null
+
+      - name: monthly_rent_php
+        description: "Monthly rent in PHP — used in rent roll and ARR calculations"
+        tests:
+          - not_null
+
+      - name: annual_rent_php
+        description: "Annual rent in PHP (monthly_rent_php × 12)"
+        tests:
+          - not_null
+
+      - name: security_deposit
+        description: "Security deposit held (2 months rent)"
+        tests:
+          - not_null
+
+      - name: rent_escalation_pct
+        description: "Annual rent escalation percentage"
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 3
+              max_value: 8
+
+      - name: status
+        description: "ACTIVE if end_date > today, EXPIRED otherwise"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["ACTIVE", "EXPIRED"]
+
+      - name: city
+        description: "City where the property is located — dimension in mart_lease_portfolio"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Makati", "BGC", "Cebu City", "Davao City"]

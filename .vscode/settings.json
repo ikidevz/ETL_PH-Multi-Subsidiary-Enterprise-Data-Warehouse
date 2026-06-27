@@ -1,0 +1,9 @@
+{
+	"python-envs.defaultEnvManager": "ms-python.python:system",
+	"chat.tools.terminal.autoApprove": {
+		"/^cd \"f:/aTO THE FUTURE/python/Projects/ETL_End_to_End/multi_subsidiary_enterprise_dw\" && python - <<'PY'\nimport re, pathlib\nbase = pathlib\\.Path\\('dbt/models/marts'\\)\nmodels = \\[p for p in base\\.glob\\('\\*\\.sql'\\) if p\\.name != 'schema\\.yml'\\]\ncols = \\{\\}\nfor p in sorted\\(models\\):\n    text = p\\.read_text\\(encoding='utf-8'\\)\n    sel = re\\.search\\(r'\\(\\?si\\)\\^\\(select\\\\b\\.\\*\\?\\)\\(\\?=\\\\bfrom\\\\b\\)', text\\)\n    if not sel:\n        sel = re\\.search\\(r'\\(\\?si\\)\\^\\(with\\\\b\\.\\*\\?select\\\\b\\.\\*\\?\\)\\(\\?=\\\\bfrom\\\\b\\)', text\\)\n    if sel:\n        part = sel\\.group\\(1\\)\n        items = re\\.findall\\(r'\\(\\?m\\)\\^\\\\s\\*\\(\\[\\^,\\\\n\\]\\+\\?\\)\\(\\?:,\\|\\$\\)', part\\)\n        # basic normalize\n        out = \\[\\]\n        for item in items:\n            t=item\\.strip\\(\\)\n            if not t or t\\.lower\\(\\)\\.startswith\\(\\('with ', 'select', 'distinct '\\)\\): continue\n            # remove trailing comma if any\n            t=re\\.sub\\(r',\\$','',t\\)\\.strip\\(\\)\n            # alias via as or last token\n            m=re\\.search\\(r'\\(\\?i\\)\\\\bAS\\\\s\\+\\(\\[\\\\w_\\]\\+\\)\\$', t\\)\n            if m: out\\.append\\(m\\.group\\(1\\)\\.lower\\(\\)\\)\n            else:\n                if '\\.' in t: out\\.append\\(t\\.split\\('\\.'\\)\\[-1\\]\\.strip\\(\\)\\.lower\\(\\)\\)\n                else: out\\.append\\(t\\.strip\\(\\)\\.lower\\(\\)\\)\n        cols\\[p\\.name\\] = out\n    else:\n        cols\\[p\\.name\\] = \\['<could not parse>'\\]\nprint\\('MODEL_COLUMNS'\\)\nfor name, c in cols\\.items\\(\\):\n    print\\(name, len\\(c\\), c\\)\nPY$/": {
+			"approve": true,
+			"matchCommandLine": true
+		}
+	}
+}

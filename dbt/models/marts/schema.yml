@@ -1,0 +1,777 @@
+# models/marts/schema.yml
+
+version: 2
+
+models:
+  - name: mart_consolidated_pnl
+    description: >
+      Consolidated revenue mart with one row per subsidiary, calendar month, and GL account.
+      It is built from ent_transaction joined to ent_subsidiary and dim_date and filters to revenue-like GL lines.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the revenue period.
+        tests:
+          - not_null
+      - name: quarter
+        description: Calendar quarter number.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4]
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: subsidiary_code
+        description: Source subsidiary identifier.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_A", "SUB_B", "SUB_C", "SUB_D", "SUB_E"]
+      - name: subsidiary_name
+        description: Human-readable subsidiary name.
+        tests:
+          - not_null
+      - name: industry_type
+        description: Industry classification from the subsidiary dimension.
+        tests:
+          - not_null
+      - name: gl_account_code
+        description: Conformed GL account code used for revenue consolidation.
+        tests:
+          - not_null
+      - name: revenue_php
+        description: Total revenue in PHP for the grouping.
+        tests:
+          - not_null
+      - name: unique_customers
+        description: Distinct customer count in the grouping.
+        tests:
+          - not_null
+      - name: transaction_count
+        description: Total transaction count in the grouping.
+        tests:
+          - not_null
+      - name: revenue_per_customer
+        description: Revenue per customer for the grouping.
+
+  - name: mart_subsidiary_kpi
+    description: >
+      Monthly operational KPI mart per subsidiary. It includes revenue, growth, shares, and transaction activity.
+    config:
+      materialized: table
+    columns:
+      - name: subsidiary_code
+        description: Source subsidiary identifier.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_A", "SUB_B", "SUB_C", "SUB_D", "SUB_E"]
+      - name: subsidiary_name
+        description: Human-readable subsidiary name.
+        tests:
+          - not_null
+      - name: industry_type
+        description: Industry classification for the subsidiary.
+        tests:
+          - not_null
+      - name: year
+        description: Calendar year from the date dimension.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: transaction_count
+        description: Number of revenue transactions in the month.
+        tests:
+          - not_null
+      - name: active_customers
+        description: Number of distinct customers with at least one transaction.
+        tests:
+          - not_null
+      - name: revenue_php
+        description: Total revenue in PHP for the month.
+        tests:
+          - not_null
+      - name: avg_transaction_php
+        description: Average revenue per transaction.
+      - name: mom_revenue_growth_pct
+        description: Month-over-month revenue growth percentage.
+      - name: group_revenue_share_pct
+        description: Revenue share as a percentage of total group revenue in the month.
+
+  - name: mart_customer_360
+    description: >
+      Customer profile mart that summarizes each customer’s cross-subsidiary revenue activity and transaction history.
+    config:
+      materialized: table
+    columns:
+      - name: customer_id_nk
+        description: Natural customer key from the source subsidiary system.
+        tests:
+          - not_null
+          - unique
+      - name: customer_type
+        description: Customer type from the customer dimension.
+        tests:
+          - not_null
+      - name: subsidiary_count
+        description: Number of distinct subsidiaries the customer has transacted with.
+        tests:
+          - not_null
+      - name: subsidiaries
+        description: Array of subsidiary codes touched by the customer.
+      - name: total_group_revenue_php
+        description: Total lifetime revenue in PHP across all subsidiaries.
+        tests:
+          - not_null
+      - name: first_transaction
+        description: Earliest transaction date across all subsidiary activity.
+        tests:
+          - not_null
+      - name: last_transaction
+        description: Latest transaction date across all subsidiary activity.
+        tests:
+          - not_null
+      - name: total_transactions
+        description: Total transaction count across all subsidiaries.
+        tests:
+          - not_null
+
+  - name: mart_intercompany_elimination
+    description: >
+      Heuristic intercompany matching mart that identifies and prepares elimination entries 
+      for transactions between subsidiaries for group-level consolidation.
+    config:
+      materialized: table
+    columns:
+      - name: selling_txn_key
+        description: Primary transaction key for the selling subsidiary's side.
+        tests:
+          - not_null
+          - unique
+
+      - name: buying_txn_key
+        description: Primary transaction key for the buying subsidiary's side.
+        tests:
+          - not_null
+          - unique
+
+      - name: seller_subsidiary
+        description: Subsidiary code of the selling entity.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_A", "SUB_B", "SUB_C", "SUB_D", "SUB_E"]
+
+      - name: buyer_subsidiary
+        description: Subsidiary code of the buying entity.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["SUB_A", "SUB_B", "SUB_C", "SUB_D", "SUB_E"]
+
+      - name: shared_counterparty
+        description: Shared counterparty customer key used to match intercompany transactions.
+        tests:
+          - not_null
+
+      - name: transaction_date
+        description: Business date of the intercompany transaction.
+        tests:
+          - not_null
+
+      - name: seller_gl_code
+        description: Original GL account code from the selling subsidiary.
+
+      - name: buyer_gl_code
+        description: Original GL account code from the buying subsidiary.
+
+      - name: seller_group_gl_code
+        description: Group-level GL code for the selling transaction.
+
+      - name: seller_amount_php
+        description: Transaction amount in PHP from the selling subsidiary.
+        tests:
+          - not_null
+
+      - name: buyer_amount_php
+        description: Transaction amount in PHP from the buying subsidiary.
+        tests:
+          - not_null
+
+      - name: interco_amount_php
+        description: Intercompany transaction amount (same as seller_amount_php, kept for readability and testing).
+        tests:
+          - not_null
+
+      - name: elimination_debit_php
+        description: Elimination debit amount (negative of seller side).
+        tests:
+          - not_null
+
+      - name: elimination_credit_php
+        description: Elimination credit amount (buyer side).
+        tests:
+          - not_null
+
+      - name: amount_difference
+        description: Absolute difference between seller and buyer amounts (should be near zero).
+        tests:
+          - not_null
+
+  - name: mart_freight_ops
+    description: >
+      Logistics operations mart summarizing shipment volume, revenue, and on-time delivery performance.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the shipment activity.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: origin_city
+        description: Shipment origin city.
+        tests:
+          - not_null
+      - name: dest_city
+        description: Shipment destination city.
+        tests:
+          - not_null
+      - name: route
+        description: Route label for the shipment pair.
+        tests:
+          - not_null
+      - name: service_type
+        description: Freight service type.
+        tests:
+          - not_null
+      - name: shipment_count
+        description: Number of shipments in the grouping.
+        tests:
+          - not_null
+      - name: total_weight_kg
+        description: Total shipment weight in kilograms.
+      - name: total_volume_cbm
+        description: Total shipment volume in cubic meters.
+      - name: freight_revenue_php
+        description: Revenue generated from freight charges.
+      - name: fuel_surcharge_php
+        description: Fuel surcharge revenue.
+      - name: total_revenue_php
+        description: Total freight-related revenue.
+      - name: revenue_per_kg
+        description: Revenue per kilogram shipped.
+      - name: on_time_count
+        description: Number of shipments delivered on time.
+      - name: otd_rate_pct
+        description: On-time delivery rate percentage.
+      - name: avg_delay_days
+        description: Average shipment delay in days.
+      - name: max_delay_days
+        description: Maximum shipment delay in days.
+      - name: severely_delayed_count
+        description: Count of shipments delayed by more than three days.
+
+  - name: mart_fx_exposure
+    description: >
+      FX exposure mart that summarizes foreign currency transaction volumes, PHP equivalents, and sensitivity.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the transaction activity.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: subsidiary_code
+        description: Subsidiary identifier for the exposure.
+        tests:
+          - not_null
+      - name: currency_code
+        description: Currency code used in the transaction.
+        tests:
+          - not_null
+      - name: is_fx_exposed
+        description: Flag indicating whether the currency is non-PHP.
+        tests:
+          - not_null
+      - name: transaction_count
+        description: Number of transactions in the grouping.
+        tests:
+          - not_null
+      - name: total_local_amount
+        description: Sum of amounts in the original currency.
+      - name: total_php_equivalent
+        description: Sum of amounts translated into PHP.
+      - name: fx_sensitivity_5pct_php
+        description: Estimated PHP sensitivity at a 5 percent FX move.
+      - name: avg_fx_rate
+        description: Average FX rate applied in the grouping.
+      - name: currency_revenue_share_pct
+        description: Currency share of period revenue.
+
+  - name: mart_order_fulfillment
+    description: >
+      Order fulfillment mart summarizing order volume, delivery metrics, and cancellation rates.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the order activity.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: plant
+        description: Manufacturing plant code.
+        tests:
+          - not_null
+      - name: sales_org
+        description: Sales organization code.
+        tests:
+          - not_null
+      - name: doc_type
+        description: Document type for the order.
+        tests:
+          - not_null
+      - name: order_count
+        description: Number of orders in the grouping.
+        tests:
+          - not_null
+      - name: total_order_qty
+        description: Total ordered quantity.
+      - name: total_delivered_qty
+        description: Total delivered quantity.
+      - name: order_value_php
+        description: Total order value in PHP.
+      - name: avg_order_value_php
+        description: Average order value in PHP.
+      - name: fill_rate_pct
+        description: Fill rate percentage.
+      - name: delivered_count
+        description: Number of delivered orders.
+      - name: billed_count
+        description: Number of billed orders.
+      - name: open_count
+        description: Number of open orders.
+      - name: cancelled_count
+        description: Number of cancelled orders.
+      - name: cancellation_rate_pct
+        description: Percentage of orders cancelled.
+      - name: avg_lead_time_days
+        description: Average order-to-confirmation lead time in days.
+
+  - name: mart_loan_portfolio
+    description: >
+      Loan portfolio mart summarizing balance, risk buckets, and delinquency metrics.
+    config:
+      materialized: table
+    columns:
+      - name: loan_type
+        description: Type of loan.
+        tests:
+          - not_null
+      - name: branch_id
+        description: Branch identifier.
+        tests:
+          - not_null
+      - name: loan_count
+        description: Number of loans in the grouping.
+        tests:
+          - not_null
+      - name: total_principal_php
+        description: Total principal amount in PHP.
+      - name: total_outstanding_php
+        description: Total outstanding balance in PHP.
+      - name: avg_interest_rate_pct
+        description: Average interest rate percentage.
+      - name: avg_term_months
+        description: Average term in months.
+      - name: current_count
+        description: Count of current loans.
+      - name: grace_period_count
+        description: Count of loans in the grace period bucket.
+      - name: dpd_30_count
+        description: Count of loans in the 30DPD bucket.
+      - name: dpd_60_count
+        description: Count of loans in the 60DPD bucket.
+      - name: dpd_90_count
+        description: Count of loans in the 90DPD bucket.
+      - name: npl_count
+        description: Count of non-performing loans.
+      - name: restructured_count
+        description: Count of loans under restructuring.
+      - name: charged_off_count
+        description: Count of loans charged off.
+      - name: npl_rate_pct
+        description: Non-performing loan rate percentage.
+      - name: balance_at_risk_php
+        description: Total balance in 90DPD or NPL buckets.
+      - name: balance_at_risk_pct
+        description: Share of outstanding balance at risk.
+
+  - name: mart_lease_portfolio
+    description: >
+      Lease portfolio mart summarizing occupancy, area, rent roll, and renewal risk.
+    config:
+      materialized: table
+    columns:
+      - name: lease_type
+        description: Type of lease.
+        tests:
+          - not_null
+      - name: unit_type
+        description: Unit type of the lease.
+        tests:
+          - not_null
+      - name: city
+        description: City of the leased property.
+        tests:
+          - not_null
+      - name: total_units
+        description: Total number of units in the grouping.
+        tests:
+          - not_null
+      - name: occupied_units
+        description: Number of active units.
+      - name: vacant_units
+        description: Number of expired units.
+      - name: occupancy_rate_pct
+        description: Occupancy rate percentage.
+      - name: total_area_sqm
+        description: Total area under management in square meters.
+      - name: occupied_area_sqm
+        description: Occupied area in square meters.
+      - name: monthly_rent_roll_php
+        description: Monthly rent roll for active leases.
+      - name: arr_php
+        description: Annual recurring revenue in PHP.
+      - name: total_deposits_held_php
+        description: Total deposits held in PHP.
+      - name: wtd_avg_escalation_pct
+        description: Weighted average rent escalation percentage.
+      - name: expiring_90d_count
+        description: Number of active leases expiring within 90 days.
+      - name: expiring_90d_monthly_rent_php
+        description: Monthly rent exposure for leases expiring within 90 days.
+
+  - name: mart_retail_sales
+    description: >
+      Retail sales mart summarizing channel, category, region, volume, and revenue performance.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the retail activity.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: channel
+        description: Sales channel.
+        tests:
+          - not_null
+      - name: category
+        description: Product category.
+        tests:
+          - not_null
+      - name: region
+        description: Geographic region.
+        tests:
+          - not_null
+      - name: order_count
+        description: Number of retail orders in the grouping.
+        tests:
+          - not_null
+      - name: units_sold
+        description: Total quantity sold.
+      - name: unique_customers
+        description: Number of distinct customers in the grouping.
+      - name: net_sales_php
+        description: Net sales in PHP.
+      - name: gross_sales_php
+        description: Gross sales in PHP.
+      - name: discount_amount_php
+        description: Total discount amount in PHP.
+      - name: avg_discount_pct
+        description: Average discount percentage.
+      - name: revenue_per_customer
+        description: Revenue per customer for the grouping.
+      - name: avg_order_value
+        description: Average order value in PHP.
+      - name: channel_revenue_share_pct
+        description: Revenue share percentage by channel within the month.
+
+  - name: mart_product_performance
+    description: >
+      Product performance mart showing monthly revenue and share metrics by subsidiary and product category.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the activity.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: subsidiary_code
+        description: Subsidiary identifier.
+        tests:
+          - not_null
+      - name: product_category
+        description: Product category from the product dimension.
+        tests:
+          - not_null
+      - name: cost_center
+        description: Cost center associated with the product.
+      - name: transaction_count
+        description: Number of revenue transactions in the grouping.
+        tests:
+          - not_null
+      - name: unique_customers
+        description: Number of distinct customers in the grouping.
+        tests:
+          - not_null
+      - name: revenue_php
+        description: Total revenue in PHP for the grouping.
+        tests:
+          - not_null
+      - name: avg_revenue_per_txn
+        description: Average revenue per transaction.
+      - name: category_revenue_rank
+        description: Revenue rank of the category within the subsidiary for the month.
+      - name: subsidiary_category_share_pct
+        description: Category share within the subsidiary for the month.
+      - name: group_category_share_pct
+        description: Category share across the full group for the month.
+
+  - name: mart_cohort_retention
+    description: >
+      Customer cohort retention fact table that measures monthly customer
+      retention by acquisition cohort and subsidiary. Each row represents a
+      customer acquisition cohort, the number of months since acquisition,
+      the size of the cohort, the number of retained customers, and the
+      corresponding retention rate.
+
+    config:
+      materialized: table
+
+    columns:
+      - name: subsidiary_code
+        description: >
+          Business subsidiary to which the customer belongs.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["SUB_A", "SUB_B", "SUB_C", "SUB_D", "SUB_E"]
+
+      - name: cohort_month
+        description: >
+          Month in which the customer was first acquired, derived from
+          the customer's acquisition date and truncated to the first day
+          of the month.
+        tests:
+          - not_null
+
+      - name: cohort_size
+        description: >
+          Total number of unique customers acquired in the cohort month
+          for the corresponding subsidiary.
+        tests:
+          - not_null
+
+      - name: months_since_acquisition
+        description: >
+          Number of whole months elapsed between the customer's cohort
+          month and the month of transactional activity.
+          A value of 0 represents the acquisition month.
+        tests:
+          - not_null
+
+      - name: retained_customers
+        description: >
+          Number of unique customers from the cohort who performed at
+          least one transaction during the corresponding activity month.
+        tests:
+          - not_null
+
+      - name: retention_rate_pct
+        description: >
+          Percentage of customers retained for the cohort month and
+          activity month, calculated as:
+
+          retained_customers / cohort_size × 100
+        tests:
+          - not_null
+
+  - name: mart_gl_account_bridge
+    description: >
+      GL account bridge mart that maps subsidiary GL lines into harmonized group reporting categories.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the posting.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: subsidiary_code
+        description: Subsidiary identifier.
+        tests:
+          - not_null
+      - name: group_gl_code
+        description: Group-level GL code used for reporting.
+        tests:
+          - not_null
+      - name: group_gl_name
+        description: Human-readable group GL label.
+      - name: gl_category
+        description: High-level GL category.
+      - name: gl_sub_category
+        description: More granular GL category.
+      - name: subsidiary_gl_code
+        description: Original subsidiary GL code.
+      - name: balance_php
+        description: Total balance in PHP for the grouping.
+        tests:
+          - not_null
+      - name: posting_count
+        description: Number of postings in the grouping.
+        tests:
+          - not_null
+      - name: subsidiary_gl_share_pct
+        description: Share of the group GL balance represented by the subsidiary line.
+
+  - name: mart_cash_collection
+    description: >
+      Cash collection mart summarizing billed amounts and collection lag metrics by subsidiary and month.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the collection period.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: subsidiary_code
+        description: Subsidiary identifier.
+        tests:
+          - not_null
+      - name: billed_php
+        description: Total billed amount in PHP.
+        tests:
+          - not_null
+      - name: collected_on_time_php
+        description: Amount collected on time.
+      - name: collected_1_7d_php
+        description: Amount collected within one to seven days.
+      - name: collected_7d_plus_php
+        description: Amount collected after seven days.
+      - name: avg_dso_days
+        description: Average days sales outstanding proxy.
+      - name: on_time_collection_rate_pct
+        description: On-time collection rate as a percentage.
+      - name: est_outstanding_php
+        description: Estimated outstanding receivables balance.
+
+  - name: mart_cost_center_spend
+    description: >
+      Cost center spend mart showing monthly expense distribution and spend shares by cost center.
+    config:
+      materialized: table
+    columns:
+      - name: year
+        description: Calendar year of the spend activity.
+        tests:
+          - not_null
+      - name: month_num
+        description: Calendar month number.
+        tests:
+          - not_null
+      - name: month_name
+        description: Month name for the reporting period.
+        tests:
+          - not_null
+      - name: subsidiary_code
+        description: Subsidiary identifier.
+        tests:
+          - not_null
+      - name: cost_center
+        description: Cost center associated with the spend posting.
+        tests:
+          - not_null
+      - name: product_category
+        description: Product category linked to the spend posting.
+      - name: posting_count
+        description: Number of expense postings in the grouping.
+        tests:
+          - not_null
+      - name: total_spend_php
+        description: Total spend in PHP for the grouping.
+        tests:
+          - not_null
+      - name: avg_posting_php
+        description: Average posting amount in PHP.
+      - name: mom_spend_change_pct
+        description: Month-over-month change in spend.
+      - name: subsidiary_spend_share_pct
+        description: Share of subsidiary spend represented by the cost center.
+      - name: group_spend_share_pct
+        description: Share of total group spend represented by the cost center.
