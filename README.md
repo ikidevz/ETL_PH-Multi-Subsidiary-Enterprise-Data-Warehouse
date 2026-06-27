@@ -1,5 +1,7 @@
 # PH Multi-Subsidiary EDW
 
+![cover_img](https://tdhghaslnufgtzjybhhf.supabase.co/storage/v1/object/public/content/ETL%20Engineer%20Portfoilo/ph_multi_subsdridary.png)
+
 This project is a portfolio-grade enterprise data warehouse designed to unify five subsidiaries operating in different industries and using different source systems into one governed reporting layer. The ambition is not just to move data from point A to point B, but to create a trusted, conformed foundation for finance, operations, and executive reporting.
 
 At the center of the design is a metadata-driven ingestion model: new subsidiaries can be onboarded through configuration rather than bespoke pipeline logic. That makes the platform feel less like a one-off demo and more like a serious enterprise architecture pattern.
